@@ -9,6 +9,31 @@ const app = express();
 app.use(bodyParser.json());
 app.use(cors()); // Habilita o CORS
 
+
+// Rota para verificar a validade do ingresso
+app.get('/api/verificarIngresso', async (req, res) => {
+  try {
+    const { valor } = req.query; // Valor lido do QR Code
+
+    // Verifique no banco de dados se o ingresso com o valor lido é válido
+    const ingressoValido = await Ingresso.findOne({ valor });
+
+    if (ingressoValido) {
+      // Ingresso válido
+      // Implemente aqui a lógica para marcar o ingresso como utilizado na base de dados, se necessário
+      res.status(200).json({ ingressoValido: true });
+    } else {
+      // Ingresso inválido
+      res.status(200).json({ ingressoValido: false });
+    }
+  } catch (error) {
+    console.error('Erro ao verificar o ingresso:', error);
+    res.status(500).json({ error: 'Erro ao verificar o ingresso' });
+  }
+});
+
+
+
 // Rota para verificar ingressos
 app.post('/api/verificar-ingresso', async (req, res) => {
   try {
