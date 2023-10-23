@@ -1,32 +1,35 @@
-// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const Ingresso = require('./models/Ingresso'); // Importe o modelo de Ingresso
 const db = require('./config/db'); // Importe a configuração do MongoDB
-
+const fs = require("fs");
+const {spawn} = require("child_process");
+const { request } = require('http');
 const app = express();
+const emailModule = require('../backend/email'); // Replace with the actual path to email.js
 
 app.use(bodyParser.json());
 app.use(cors()); // Habilita o CORS
 
-
-
 // Rota para verificar a validade do ingresso
 app.get('/api/verificarIngresso', async (req, res) => {
   try {
-    const { valor } = req.query; // Valor lido do QR Code
+    const numero = req.query.numero;
 
-    // Verifique no banco de dados se o ingresso com o valor lido é válido
-    const ingressoValido = await Ingresso.findOne({ valor });
+    const ingresso = await Ingresso.findOne({ numero });
 
-    if (ingressoValido) {
-      // Ingresso válido
-      // Implemente aqui a lógica para marcar o ingresso como utilizado na base de dados, se necessário
-      res.status(200).json({ ingressoValido: true });
-    } else {
-      // Ingresso inválido
-      res.status(200).json({ ingressoValido: false });
+    if (ingresso) {
+      if (ingresso.lido) {
+        res.status(200).json({ingressoValido: false, message:"Ingresso já foi utilizado"})
+      } else {
+      ingresso.lido = true;
+      await ingresso.save();
+      res.json({ ingressoValido: true });
+      }
+    }
+    else {
+      res.status(200).json({ ingressoValido: false, message: "Ingresso não encontrado" });
     }
   } catch (error) {
     console.error('Erro ao verificar o ingresso:', error);
@@ -39,13 +42,14 @@ app.get('/api/verificarIngresso', async (req, res) => {
 // Rota para registrar ingressos
 app.post('/api/ingressos', async (req, res) => {
   try {
-    const { nome, contato } = req.body;
+    const { nome, contato, lido } = req.body;
 
-    // Crie um novo ingresso no banco de dados
-    const novoIngresso = new Ingresso({ nome, contato });
+    const numeroAleatorio = Math.floor(Math.random() * 1000000)
+    const novoIngresso = new Ingresso({ nome, contato, numero: numeroAleatorio, lido });
+    
 
     // Salve o ingresso no banco de dados
-    await novoIngresso.save();
+    //await novoIngresso.save();
 
     res.status(201).json(novoIngresso);
   } catch (error) {
@@ -70,3 +74,26 @@ app.get('/api/ingressos', async (req, res) => {
       res.status(500).json({ error: 'Erro ao buscar ingressos' });
     }
   });
+
+
+app.get('/api/sendQR', (req, res) => {
+  // Example usage of sendEmailWithAttachment
+  const nome = req.query.nome;
+  const numero = req.query.numero;
+  const pdf = req.query.pdf;
+
+  const from = "texticketsexchange@gmail.com";
+  const to = req.query.contato;
+  const subject = 'Ingressos Parmejó 2023';
+  const text = 'Olá, tudo bem? Seu Ingresso para o PARMEJÓ2023 já está disponível!';
+  const pdfFileName = `${nome} - ${numero}.pdf`;
+  const pdfBase64Data = pdf;
+
+  emailModule.sendEmailWithAttachment(from, to, subject, text, pdfFileName, pdfBase64Data);
+
+  res.send('Email sent.');
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
+});
